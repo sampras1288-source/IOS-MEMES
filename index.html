@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Мемы</title>
+<meta name="theme-color" content="#E9ECF1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Мемы">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+
+<style>
+:root{--bg:#E9ECF1;--ink:#17171C;--pop:#FF3D81;--card:#fff}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,sans-serif;padding:env(safe-area-inset-top) 12px calc(96px + env(safe-area-inset-bottom));-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+header{position:sticky;top:0;background:var(--bg);padding:16px 0 12px;z-index:2}
+h1{font:900 32px/1 Impact,"Arial Black",sans-serif;display:inline-block;background:var(--pop);color:#fff;padding:4px 14px;border:3px solid var(--ink);box-shadow:4px 4px 0 var(--ink);transform:rotate(-1.5deg)}
+input[type=search],#name{display:block;width:100%;margin-top:14px;padding:11px 14px;font:inherit;border:3px solid var(--ink);background:var(--card);border-radius:0;-webkit-user-select:text;user-select:text}
+#grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.t{border:3px solid var(--ink);box-shadow:3px 3px 0 var(--ink);background:var(--card);overflow:hidden}
+.t.on{box-shadow:3px 3px 0 var(--pop);border-color:var(--pop);transform:translate(1px,1px)}
+.pic{aspect-ratio:1;width:100%;display:flex;align-items:center;justify-content:center;text-align:center;padding:8px;font:900 22px/1.1 Impact,"Arial Black",sans-serif;overflow:hidden}
+.pic:has(img){padding:0}.pic img{width:100%;height:100%;object-fit:cover;pointer-events:none}
+.cap{padding:5px 8px;font-size:14px;font-weight:700;border-top:3px solid var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#empty{margin-top:40px;text-align:center;font-size:18px;padding:0 20px}
+#hint{margin-top:18px;text-align:center;font-size:13px;opacity:.7}
+.big{white-space:nowrap;font:900 19px Impact,"Arial Black",sans-serif;padding:14px 26px;background:var(--pop);color:#fff;border:3px solid var(--ink);box-shadow:4px 4px 0 var(--ink)}
+#add{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom))}
+#dlg{position:fixed;inset:0;z-index:10;background:rgba(23,23,28,.7);display:flex;align-items:center;justify-content:center;padding:12px;overflow:auto}
+#dlg[hidden]{display:none}
+.box{border:3px solid var(--ink);box-shadow:6px 6px 0 var(--ink);padding:16px;width:min(100%,460px);background:var(--card)}
+.box h2{font:900 24px Impact,"Arial Black",sans-serif}
+.btn{position:relative;display:block;width:100%;margin-top:12px;padding:12px;font:700 16px system-ui,sans-serif;border:3px solid var(--ink);background:var(--card);color:var(--ink);border-radius:0;text-align:left}
+.btn.ok{background:#C9F5D4}
+.row{display:flex;gap:10px;margin-top:16px}
+.btn input{position:absolute;inset:0;width:100%;height:100%;opacity:0}
+.row .btn{margin:0;text-align:center}.row .pop{background:var(--pop);color:#fff}
+#prev{display:block;width:96px;height:96px;object-fit:cover;border:3px solid var(--ink);margin-top:12px}
+#prev[hidden]{display:none}
+:focus-visible{outline:3px solid var(--pop);outline-offset:2px}
+</style></head>
+<body>
+<header><h1>Мемы</h1><input type="search" id="q" placeholder="Поиск по названию" aria-label="Поиск по названию"></header>
+<main><div id="grid"></div><p id="empty" hidden></p><p id="hint" hidden>Нажмите на картинку, чтобы включить звук. Удерживайте, чтобы удалить.</p></main>
+<button class="big" id="add">Добавить мем</button>
+<div id="dlg" hidden><div class="box">
+  <h2>Новый мем</h2>
+  <input id="name" placeholder="Название" aria-label="Название">
+  <label class="btn" id="lImg"><span id="tImg">Выбрать картинку</span><input id="fImg" type="file" accept="image/*"></label>
+  <img id="prev" alt="" hidden>
+  <label class="btn" id="lSnd"><span id="tSnd">Выбрать звук</span><input id="fSnd" type="file" accept="audio/*"></label>
+  <div class="row"><button class="btn" id="cancel">Отмена</button><button class="btn pop" id="save">Сохранить</button></div>
+</div></div>
+<script>
+const $=s=>document.querySelector(s);
+const db=new Promise((ok,no)=>{const r=indexedDB.open('memes',2);r.onupgradeneeded=()=>{const d=r.result;if(d.objectStoreNames.contains('m'))d.deleteObjectStore('m');d.createObjectStore('m',{keyPath:'id',autoIncrement:true})};r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)});
+const tx=async(mode,fn)=>{const d=await db;return new Promise((ok,no)=>{const t=d.transaction('m',mode);const q=fn(t.objectStore('m'));t.oncomplete=()=>ok(q&&q.result);t.onerror=()=>no(t.error)})};
+const COLORS=['#FFC83D','#5BB5FF','#7DDC8E','#FF7AA2','#B48CFF','#F0F07A'];
+let items=[],au=null,onEl=null,img=null,snd=null;
+async function load(){
+  const mine=await tx('readonly',s=>s.getAll());
+  let bundled=[];
+  try{bundled=(await (await fetch('memes/manifest.json')).json()).map(b=>({id:'b:'+b.name,name:b.name,imgUrl:b.image&&'memes/'+b.image,sndUrl:'memes/'+b.sound,fixed:1}))}catch(e){}
+  items=[...mine.reverse().map(m=>({id:m.id,name:m.name,imgUrl:m.img&&URL.createObjectURL(m.img),sndUrl:URL.createObjectURL(m.snd)})),...bundled];
+  render();
+}
+function render(){
+  const q=$('#q').value.trim().toLowerCase(),g=$('#grid');g.replaceChildren();
+  const list=items.filter(m=>m.name.toLowerCase().includes(q));
+  list.forEach((m,i)=>{
+    const t=document.createElement('div');t.className='t';
+    const p=document.createElement('div');p.className='pic';
+    if(m.imgUrl){const im=document.createElement('img');im.src=m.imgUrl;im.alt='';p.append(im)}else{p.style.background=COLORS[i%COLORS.length];p.textContent=m.name}
+    const c=document.createElement('div');c.className='cap';c.textContent=m.name;
+    t.append(p,c);bind(t,m);g.append(t);
+  });
+  $('#empty').hidden=list.length>0;$('#hint').hidden=!list.length;
+  $('#empty').textContent=items.length?'Ничего не найдено. Попробуйте другое название.':'Здесь пока пусто. Нажмите «Добавить мем», выберите картинку и звук.';
+}
+function bind(t,m){
+  let timer,long=false;
+  t.onpointerdown=()=>{long=false;timer=setTimeout(async()=>{long=true;if(m.fixed)return;if(confirm('Удалить «'+m.name+'»?')){await tx('readwrite',s=>s.delete(m.id));load()}},600)};
+  const stop=()=>clearTimeout(timer);t.onpointerup=stop;t.onpointerleave=stop;t.onpointercancel=stop;
+  t.oncontextmenu=e=>e.preventDefault();
+  t.onclick=()=>{if(!long)play(m,t)};
+}
+function play(m,el){
+  if(au){au.pause();onEl&&onEl.classList.remove('on')}
+  au=new Audio(m.sndUrl);onEl=el;el.classList.add('on');
+  au.onended=()=>el.classList.remove('on');
+  au.play().catch(()=>el.classList.remove('on'));
+}
+$('#q').oninput=render;
+const dlg=$('#dlg');
+function reset(){img=snd=null;$('#fImg').value='';$('#fSnd').value='';$('#name').value='';$('#prev').hidden=true;$('#tImg').textContent='Выбрать картинку';$('#tSnd').textContent='Выбрать звук';$('#lImg').classList.remove('ok');$('#lSnd').classList.remove('ok')}
+$('#add').onclick=()=>{reset();dlg.hidden=false};
+$('#cancel').onclick=()=>{dlg.hidden=true};
+$('#fImg').onchange=e=>{img=e.target.files[0]||null;if(!img)return;$('#prev').src=URL.createObjectURL(img);$('#prev').hidden=false;$('#tImg').textContent='Картинка: '+img.name;$('#lImg').classList.add('ok');if(!$('#name').value)$('#name').value=img.name.replace(/\.[^.]+$/,'')};
+$('#fSnd').onchange=e=>{snd=e.target.files[0]||null;if(!snd)return;$('#tSnd').textContent='Звук: '+snd.name;$('#lSnd').classList.add('ok');if(!$('#name').value)$('#name').value=snd.name.replace(/\.[^.]+$/,'')};
+$('#save').onclick=async()=>{
+  if(!snd){alert('Выберите звук для мема.');return}
+  const name=$('#name').value.trim()||'Без названия';
+  try{await tx('readwrite',s=>s.add({name,img,snd}));dlg.hidden=true;await load()}catch(err){alert('Не удалось сохранить: '+err)}
+};
+window.onerror=m=>alert('Ошибка: '+m);
+load();
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script></body></html>
